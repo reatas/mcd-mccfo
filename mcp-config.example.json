@@ -1,0 +1,14 @@
+{
+  "_comment": "McCFO 麦当劳 MCP 接入配置示例（已脱敏）。请把 ${MCD_MCP_TOKEN} 替换为你自己的 Token，或直接设置同名环境变量后使用。本文件不包含任何真实凭据。",
+  "_tokenUrl": "https://open.mcd.cn/mcp",
+  "_doc": "https://github.com/M-China/mcd-mcp-server",
+  "mcpServers": {
+    "mcd-mcp": {
+      "type": "streamablehttp",
+      "url": "https://mcp.mcd.cn",
+      "headers": {
+        "Authorization": "Bearer ${MCD_MCP_TOKEN}"
+      }
+    }
+  }
+}
