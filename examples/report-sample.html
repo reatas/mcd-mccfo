@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>McCFO 月度消费财报 · 2026-10-01 ~ 2026-10-10</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1b1f24; --sub:#6b7280;
+    --line:#e5e7eb; --up:#d92b2b; --down:#12864a; --gold:#f2b705; --mcd:#d92b2b;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.6; }
+  .wrap { max-width:920px; margin:0 auto; padding:32px 20px 64px; }
+  header { text-align:center; padding:28px 24px; background:linear-gradient(135deg,#1b1f24,#2b3138);
+    color:#fff; border-radius:16px; }
+  header .kicker { letter-spacing:.3em; font-size:12px; color:var(--gold); }
+  header h1 { margin:8px 0 4px; font-size:30px; }
+  header .meta { color:#c8ccd2; font-size:13px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:20px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card .k { font-size:12px; color:var(--sub); }
+  .card .v { font-size:22px; font-weight:700; margin-top:4px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:20px 22px; margin:16px 0; }
+  h2 { font-size:18px; margin:0 0 12px; padding-left:10px; border-left:4px solid var(--mcd); }
+  h4 { margin:0 0 8px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; }
+  th { color:var(--sub); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.alert { background:#fff6f6; }
+  tr.muted { color:var(--sub); }
+  .bar { background:#eef0f3; border-radius:6px; height:8px; min-width:60px; }
+  .bar span { display:block; height:8px; border-radius:6px; background:linear-gradient(90deg,#f2b705,#d92b2b); }
+  .up { color:var(--up); font-weight:700; }
+  .down { color:var(--down); font-weight:700; }
+  .alertbox { background:#fff6f6; border:1px solid #f5c2c2; border-radius:10px; padding:12px 16px; margin:12px 0; }
+  .alertbox ul { margin:0; padding-left:20px; }
+  ol.actions li { margin:6px 0; }
+  footer { text-align:center; color:var(--sub); font-size:12px; margin-top:24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">McCFO · 麦麦财务官</div>
+    <h1>📊 月度消费财报</h1>
+    <div class="meta">统计期间 2026-10-01 ~ 2026-10-10 ｜ 生成于 2026-10-10 ｜ 数据来源：麦当劳中国官方 MCP</div>
+  </header>
+
+  <div class="cards">
+    <div class="card"><div class="k">总支出</div><div class="v">¥198.70</div><div class="k"><span class="up">▲ 12.6%</span> 环比上月</div></div>
+    <div class="card"><div class="k">订单数</div><div class="v">8</div><div class="k">客单价 ¥24.84</div></div>
+    <div class="card"><div class="k">用券省下</div><div class="v">¥72.80</div><div class="k">折扣率 26.8%</div></div>
+    <div class="card"><div class="k">券资产</div><div class="v">¥55.30</div><div class="k">7 张有效</div></div>
+    <div class="card"><div class="k">积分资产</div><div class="v">1,280</div><div class="k">400 分将过期</div></div>
+  </div>
+
+  <section>
+    <h2>一、消费结构 · 品类</h2>
+    <table>
+      <tr><th>品类</th><th style="text-align:right">金额</th><th style="text-align:right">占比</th><th>分布</th><th style="text-align:right">件数</th></tr>
+      <tr><td>汉堡</td><td class="num">¥108.50</td><td class="num">40.0%</td><td><div class="bar"><span style="width:40.0%"></span></div></td><td class="num">6</td></tr><tr><td>小食</td><td class="num">¥71.00</td><td class="num">26.2%</td><td><div class="bar"><span style="width:26.2%"></span></div></td><td class="num">6</td></tr><tr><td>饮料</td><td class="num">¥44.00</td><td class="num">16.2%</td><td><div class="bar"><span style="width:16.2%"></span></div></td><td class="num">4</td></tr><tr><td>甜品</td><td class="num">¥14.00</td><td class="num">5.2%</td><td><div class="bar"><span style="width:5.2%"></span></div></td><td class="num">1</td></tr><tr><td>套餐</td><td class="num">¥34.00</td><td class="num">12.5%</td><td><div class="bar"><span style="width:12.5%"></span></div></td><td class="num">1</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>二、时段分布</h2>
+    <table><tr><th>时段</th><th style="text-align:right">支出</th><th style="text-align:right">单数</th></tr><tr><td>午餐</td><td class="num">¥71.70</td><td class="num">3</td></tr><tr><td>早餐</td><td class="num">¥43.00</td><td class="num">2</td></tr><tr><td>晚餐</td><td class="num">¥40.00</td><td class="num">1</td></tr><tr><td>夜宵</td><td class="num">¥23.00</td><td class="num">1</td></tr><tr><td>下午茶</td><td class="num">¥21.00</td><td class="num">1</td></tr></table>
+    <h4 style="margin-top:16px">就餐方式</h4>
+    <table><tr><th>方式</th><th style="text-align:right">支出</th><th style="text-align:right">单数</th></tr><tr><td>到店取餐</td><td class="num">¥129.70</td><td class="num">5</td></tr><tr><td>麦乐送</td><td class="num">¥44.00</td><td class="num">2</td></tr><tr><td>得来速</td><td class="num">¥25.00</td><td class="num">1</td></tr></table>
+  </section>
+
+  <section>
+    <h2>三、券资产配置</h2>
+    <p class="k">有效券 7 张 ｜ 账面价值 ¥55.30 ｜
+       本店可用 ¥49.30 ｜ 加权收益率 54.1%</p>
+    <div class="alertbox"><h4>🔴 临期券预警</h4><ul><li><b>9.9元中杯冰美式</b> — 1 天后到期，可省 ¥9.10</li><li><b>满30减10</b> — 2 天后到期，可省 ¥10.00</li></ul></div>
+    <table>
+      <tr><th>券名</th><th style="text-align:right">面额</th><th style="text-align:right">门槛</th>
+          <th>到期</th><th style="text-align:right">剩余</th><th style="text-align:right">收益率</th>
+          <th style="text-align:right">优先级</th><th>状态</th></tr>
+      <tr class="alert"><td>9.9元中杯冰美式</td><td class="num">¥9.10</td><td class="num">¥0.00</td><td>2026-10-11</td><td class="num">1天</td><td class="num">100.0%</td><td class="num">18.200</td><td>🔴 临期</td></tr><tr class=""><td>薯薯任选9.9元</td><td class="num">¥6.10</td><td class="num">¥0.00</td><td>2026-10-16</td><td class="num">6天</td><td class="num">100.0%</td><td class="num">8.540</td><td>🟡 关注</td></tr><tr class="alert"><td>满30减10</td><td class="num">¥10.00</td><td class="num">¥30.00</td><td>2026-10-12</td><td class="num">2天</td><td class="num">33.3%</td><td class="num">5.000</td><td>🔴 临期</td></tr><tr class=""><td>满50减15</td><td class="num">¥15.00</td><td class="num">¥50.00</td><td>2026-10-20</td><td class="num">10天</td><td class="num">30.0%</td><td class="num">4.950</td><td>🟢 充裕</td></tr><tr class=""><td>麦旋风任选9.9元</td><td class="num">¥4.10</td><td class="num">¥0.00</td><td>2026-10-18</td><td class="num">8天</td><td class="num">100.0%</td><td class="num">4.612</td><td>🟢 充裕</td></tr><tr class=""><td>早餐满25减5</td><td class="num">¥5.00</td><td class="num">¥25.00</td><td>2026-10-15</td><td class="num">5天</td><td class="num">20.0%</td><td class="num">1.200</td><td>🟡 关注</td></tr><tr class="muted"><td>满20减6(到店专享)</td><td class="num">¥6.00</td><td class="num">¥20.00</td><td>2026-10-14</td><td class="num">4天</td><td class="num">30.0%</td><td class="num">—</td><td>⚪ 本店不可用</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>四、积分资产 ROI</h2>
+    <p>可用 <b>1,280</b> 分 ｜ 即将过期 <b>400</b> 分
+       （压力 31.2%）</p>
+    <table>
+      <tr><th>商品</th><th style="text-align:right">消耗积分</th><th style="text-align:right">参考价值</th>
+          <th style="text-align:right">每积分价值</th><th style="text-align:right">优先级</th></tr>
+      <tr><td>中杯拿铁</td><td class="num">300</td><td class="num">¥19.00</td><td class="num">0.0633 元/分</td><td class="num">0.0950</td></tr><tr><td>中薯条</td><td class="num">200</td><td class="num">¥12.00</td><td class="num">0.0600 元/分</td><td class="num">0.0600</td></tr><tr><td>麦咖啡中杯美式</td><td class="num">200</td><td class="num">¥12.00（估）</td><td class="num">0.0600 元/分</td><td class="num">0.0600</td></tr><tr><td>麦旋风</td><td class="num">250</td><td class="num">¥14.00</td><td class="num">0.0560 元/分</td><td class="num">0.0560</td></tr><tr><td>香芋派</td><td class="num">150</td><td class="num">¥8.00</td><td class="num">0.0533 元/分</td><td class="num">0.0533</td></tr><tr><td>中杯可乐</td><td class="num">180</td><td class="num">¥9.00</td><td class="num">0.0500 元/分</td><td class="num">0.0500</td></tr><tr><td>麦乐鸡5块</td><td class="num">280</td><td class="num">¥13.00</td><td class="num">0.0464 元/分</td><td class="num">0.0464</td></tr><tr><td>巨无霸</td><td class="num">500</td><td class="num">¥23.00</td><td class="num">0.0460 元/分</td><td class="num">0.0460</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>五、接下来做什么</h2>
+    <ol class="actions"><li><b>优先用掉临期高价值券</b>：「9.9元中杯冰美式」1 天后到期，收益率 100.0%，无门槛，可直接省 ¥9.10。</li><li><b>别漏掉这张临期券</b>：「满30减10」2 天后到期，可省 ¥10.00。</li><li><b>兑换积分</b>：中杯拿铁，300 分兑 ¥19.00（0.0633 元/分），ROI 最优。</li></ol>
+  </section>
+
+  <footer>
+    ⚠️ 本报告由 McCFO 技能生成，为麦当劳程序员节创意开发大赛参赛作品，非麦当劳官方产品。<br>
+    所有金额单位为「元」，积分不折算为金额；餐品与券的可用性以麦当劳官方渠道实时结果为准。
+  </footer>
+</div>
+</body>
+</html>
