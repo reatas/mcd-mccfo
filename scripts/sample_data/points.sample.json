@@ -1,0 +1,16 @@
+{
+  "_note": "McCFO 示例数据（脱敏、合成）。available/expiring 对应 query-my-account；products 对应 mall-points-products + mall-product-detail。cashPrice 为该商品的现金参考价（元），valueEstimated=true 表示用同类菜单标价估算。points 为消耗积分，不做汇率换算。",
+  "available": 1280,
+  "expiring": 400,
+  "expiringDate": "2026-10-31",
+  "products": [
+    {"name": "中杯拿铁", "points": 300, "cashPrice": 19.00, "needMatch": 1.5, "valueEstimated": false},
+    {"name": "中薯条", "points": 200, "cashPrice": 12.00, "needMatch": 1.0, "valueEstimated": false},
+    {"name": "麦咖啡中杯美式", "points": 200, "cashPrice": 12.00, "needMatch": 1.0, "valueEstimated": true},
+    {"name": "麦旋风", "points": 250, "cashPrice": 14.00, "needMatch": 1.0, "valueEstimated": false},
+    {"name": "香芋派", "points": 150, "cashPrice": 8.00, "needMatch": 1.0, "valueEstimated": false},
+    {"name": "中杯可乐", "points": 180, "cashPrice": 9.00, "needMatch": 1.0, "valueEstimated": false},
+    {"name": "麦乐鸡5块", "points": 280, "cashPrice": 13.00, "needMatch": 1.0, "valueEstimated": false},
+    {"name": "巨无霸", "points": 500, "cashPrice": 23.00, "needMatch": 1.0, "valueEstimated": false}
+  ]
+}
