@@ -1,0 +1,79 @@
+{
+  "_note": "McCFO 示例数据（脱敏、合成）。字段对应麦当劳 MCP 的 query-my-coupons / query-store-coupons / available-coupons 返回结果。threshold=0 表示无门槛券；storeAvailable 来自 query-store-coupons 的门店级校验。",
+  "asOf": "2026-10-10",
+  "store": "麦当劳(珠江新城店)",
+  "coupons": [
+    {
+      "name": "满30减10",
+      "discount": 10.0,
+      "threshold": 30.0,
+      "expireDate": "2026-10-12",
+      "scope": "全场",
+      "storeAvailable": true,
+      "fitBoost": 1.0
+    },
+    {
+      "name": "满50减15",
+      "discount": 15.0,
+      "threshold": 50.0,
+      "expireDate": "2026-10-20",
+      "scope": "全场",
+      "storeAvailable": true,
+      "fitBoost": 1.0
+    },
+    {
+      "name": "9.9元中杯冰美式",
+      "discount": 9.1,
+      "threshold": 0.0,
+      "expireDate": "2026-10-11",
+      "scope": "饮料-麦咖啡",
+      "storeAvailable": true,
+      "fitBoost": 1.0
+    },
+    {
+      "name": "麦旋风任选9.9元",
+      "discount": 4.1,
+      "threshold": 0.0,
+      "expireDate": "2026-10-18",
+      "scope": "甜品",
+      "storeAvailable": true,
+      "fitBoost": 1.0
+    },
+    {
+      "name": "早餐满25减5",
+      "discount": 5.0,
+      "threshold": 25.0,
+      "expireDate": "2026-10-15",
+      "scope": "早餐时段",
+      "storeAvailable": true,
+      "fitBoost": 1.0
+    },
+    {
+      "name": "薯薯任选9.9元",
+      "discount": 6.1,
+      "threshold": 0.0,
+      "expireDate": "2026-10-16",
+      "scope": "小食",
+      "storeAvailable": true,
+      "fitBoost": 1.2
+    },
+    {
+      "name": "满40减8(麦乐送)",
+      "discount": 8.0,
+      "threshold": 40.0,
+      "expireDate": "2026-10-09",
+      "scope": "麦乐送",
+      "storeAvailable": true,
+      "fitBoost": 1.0
+    },
+    {
+      "name": "满20减6(到店专享)",
+      "discount": 6.0,
+      "threshold": 20.0,
+      "expireDate": "2026-10-14",
+      "scope": "到店",
+      "storeAvailable": false,
+      "fitBoost": 1.0
+    }
+  ]
+}
