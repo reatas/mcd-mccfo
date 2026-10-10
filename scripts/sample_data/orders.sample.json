@@ -1,0 +1,120 @@
+{
+  "_note": "McCFO 示例数据（脱敏、合成）。字段结构对应麦当劳 MCP 的 order-list / query-order 返回结果，由 Agent 取数后归一化。真实使用时请勿提交真实订单数据。",
+  "period": "2026-10-01 ~ 2026-10-10",
+  "prevPeriodTotal": 176.40,
+  "orders": [
+    {
+      "orderId": "MC20261002001",
+      "date": "2026-10-02 08:12",
+      "store": "麦当劳(珠江新城店)",
+      "channel": "到店取餐",
+      "items": [
+        {"name": "吉士蛋麦满分", "category": "汉堡", "qty": 1, "price": 13.00},
+        {"name": "中杯鲜煮咖啡", "category": "饮料", "qty": 1, "price": 9.00}
+      ],
+      "listAmount": 22.00,
+      "discount": 4.00,
+      "payAmount": 18.00,
+      "coupons": ["满20减4"]
+    },
+    {
+      "orderId": "MC20261003002",
+      "date": "2026-10-03 12:31",
+      "store": "麦当劳(珠江新城店)",
+      "channel": "到店取餐",
+      "items": [
+        {"name": "巨无霸", "category": "汉堡", "qty": 1, "price": 23.00},
+        {"name": "中薯条", "category": "小食", "qty": 1, "price": 12.00},
+        {"name": "中杯可乐", "category": "饮料", "qty": 1, "price": 9.00}
+      ],
+      "listAmount": 44.00,
+      "discount": 14.30,
+      "payAmount": 29.70,
+      "coupons": ["满30减10", "满30减4.3"]
+    },
+    {
+      "orderId": "MC20261005003",
+      "date": "2026-10-05 15:20",
+      "store": "麦当劳(猎德店)",
+      "channel": "麦乐送",
+      "items": [
+        {"name": "麦旋风", "category": "甜品", "qty": 1, "price": 14.00},
+        {"name": "麦乐鸡5块", "category": "小食", "qty": 1, "price": 13.00}
+      ],
+      "listAmount": 27.00,
+      "discount": 6.00,
+      "payAmount": 21.00,
+      "coupons": ["满25减6"]
+    },
+    {
+      "orderId": "MC20261006004",
+      "date": "2026-10-06 19:05",
+      "store": "麦当劳(珠江新城店)",
+      "channel": "到店取餐",
+      "items": [
+        {"name": "板烧鸡腿堡", "category": "汉堡", "qty": 1, "price": 19.50},
+        {"name": "中薯条", "category": "小食", "qty": 1, "price": 12.00},
+        {"name": "麦辣鸡翅", "category": "小食", "qty": 2, "price": 11.00}
+      ],
+      "listAmount": 53.50,
+      "discount": 13.50,
+      "payAmount": 40.00,
+      "coupons": ["满50减15"]
+    },
+    {
+      "orderId": "MC20261007005",
+      "date": "2026-10-07 09:40",
+      "store": "麦当劳(黄埔大道店)",
+      "channel": "得来速",
+      "items": [
+        {"name": "吉士蛋麦满分", "category": "汉堡", "qty": 1, "price": 13.00},
+        {"name": "中杯拿铁", "category": "饮料", "qty": 1, "price": 17.00}
+      ],
+      "listAmount": 30.00,
+      "discount": 5.00,
+      "payAmount": 25.00,
+      "coupons": ["早餐满30减5"]
+    },
+    {
+      "orderId": "MC20261008006",
+      "date": "2026-10-08 12:15",
+      "store": "麦当劳(珠江新城店)",
+      "channel": "到店取餐",
+      "items": [
+        {"name": "巨无霸中套餐", "category": "套餐", "qty": 1, "price": 34.00}
+      ],
+      "listAmount": 34.00,
+      "discount": 12.00,
+      "payAmount": 22.00,
+      "coupons": ["套餐立减12"]
+    },
+    {
+      "orderId": "MC20261009007",
+      "date": "2026-10-09 22:40",
+      "store": "麦当劳(猎德店)",
+      "channel": "麦乐送",
+      "items": [
+        {"name": "麦辣鸡腿堡", "category": "汉堡", "qty": 1, "price": 19.00},
+        {"name": "中薯条", "category": "小食", "qty": 1, "price": 12.00}
+      ],
+      "listAmount": 31.00,
+      "discount": 8.00,
+      "payAmount": 23.00,
+      "coupons": ["满30减8"]
+    },
+    {
+      "orderId": "MC20261010008",
+      "date": "2026-10-10 12:50",
+      "store": "麦当劳(珠江新城店)",
+      "channel": "到店取餐",
+      "items": [
+        {"name": "双层吉士堡", "category": "汉堡", "qty": 1, "price": 21.00},
+        {"name": "中杯可乐", "category": "饮料", "qty": 1, "price": 9.00}
+      ],
+      "listAmount": 30.00,
+      "discount": 10.00,
+      "payAmount": 20.00,
+      "coupons": ["满30减10"]
+    }
+  ]
+}
