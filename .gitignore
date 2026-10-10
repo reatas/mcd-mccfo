@@ -1,0 +1,28 @@
+# 忽略 macOS / Windows 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 忽略编辑器
+.vscode/
+.idea/
+*.swp
+
+# 忽略 Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 忽略渲染产物（示例产物已放在 examples/，此处为运行时输出）
+out/
+scripts/out/
+
+# ★ 安全：绝不提交任何真实凭据
+.env
+.env.*
+!.env.example
+*secret*
+*token*.txt
+*.local.json
