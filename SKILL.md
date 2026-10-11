@@ -1,7 +1,7 @@
 ---
 name: mccfo
 description: 麦麦财务官 McCFO —— 把麦当劳的「消费账单 + 优惠券 + 积分」当成一份个人资产负债表来经营。一键生成月度消费财报、券资产最优配置、积分兑换 ROI 排行、活动择时日历。当用户问「我这个月在麦当劳花了多少」「我的券怎么用最划算」「积分兑换什么最值」「这周有什么活动值得去」「帮我做一份麦当劳消费报告」时使用本技能。
-version: 1.0.0
+version: 1.1.0
 license: MIT
 ---
 
@@ -31,8 +31,11 @@ license: MIT
 1. **绝不在未经用户明确确认的情况下调用 `create-order` / `mall-create-order` / `party-order-create` / `cancel-order` / `draw-lottery`。** 任何涉及花钱、花积分、消耗次数、影响账户的操作，必须先展示明细、再等用户说"确认/下单/可以"。
 2. **金额单位是「元」字符串，积分不是元。** 所有 MCP 返回的金额字段（如 `price`、`totalPrice`）已经是「元」，直接用；所有积分字段（`points`、`totalPoints`）是积分，**不做任何汇率换算**。
 3. **不编造数据。** 任何一个数字都必须来自工具返回。工具失败或返回为空时，明确说"该项数据未取到"，不要用估算值填空。
-4. **不夸大、不诱导。** 不做"不买就亏了""再不领就没了"这类制造焦虑的话术；不做奢靡浪费、拜金导向的内容。
-5. **礼券/券的可用性以工具实时返回为准。** 券是否可用受门店、时段、品类限制，必须用 `query-store-coupons` 校验，不能只看 `query-my-coupons` 的静态卡包。
+4. **券的 `discountInfo.discountValue` 不是优惠金额。** 实测它的语义写在 `discountDesc` 里（多为「用券价格」）。把 9.9 元早餐两件套券当成"省 9.9 元"会严重虚高。只有券名形如「满X减Y」时，面额才是可信的精确值；其余一律标 **（估）**，并说明它是券后价。
+5. **不夸大、不诱导。** 不做"不买就亏了""再不领就没了"这类制造焦虑的话术；不做奢靡浪费、拜金导向的内容。
+6. **礼券/券的可用性以工具实时返回为准。** 券是否可用受门店、时段、品类限制，必须用 `query-store-coupons` 校验，不能只看 `query-my-coupons` 的静态卡包。
+   **但 `query-store-coupons` 返回空数组 ≠ 这些券不能用** —— 券未进入可用时间窗（`instructions.labels` 显示「未到使用时间」）时也会返回空。此时要说"未做门店级校验，可用性以券面状态为准"，不能说"本店不可用"。
+7. **积分不够就直说。** 账户可用积分低于最便宜兑换品时，明确给出"还差多少分"，不要生成一份看起来能换的排行榜。
 
 ## 工作模式
 
@@ -133,11 +136,35 @@ license: MIT
 - **有观点**：给出明确建议（"建议先用掉周三到期的满 30 减 10"），而不是罗列数据让用户自己想。
 - **可落地**：每条建议都要说清"具体做什么"，比如"20 号会员日买板烧套餐，券后实付 X 元"。
 
+## 真实取数通道（重要）
+
+McCFO 不只靠 Agent 在对话里逐个调工具，它还带一套**可直接运行的真实取数代码**：
+
+```bash
+export MCD_MCP_TOKEN='你的Token'          # 或项目根目录建 .env
+python scripts/mccfo_fetch.py --out out --render
+```
+
+它会真实调用麦当劳 MCP（`now-time-info` → `order-list` → 逐单 `query-order` →
+`query-my-coupons` → `query-store-coupons` → `query-my-account` →
+`mall-points-products` → `mall-product-detail`），产出
+`out/raw/*`（原始返回）、`out/normalized/*`（归一化 JSON）、
+`out/mccfo-report.md` + `out/mccfo-report.html`（财报）。
+
+**当用户要一份真实财报时，优先跑这条链路**，而不是在对话里手搓数据：
+口径一致、可复现、且每一次取数的降级项都会被写进报告第八节。
+
+只用得到 `scripts/mccfo_report.py` 渲染已有 JSON 时（例如脱敏样例），
+不传 `--meta` 即可，报告会自动标注为「脱敏样例数据」。
+
 ## 配套资源
 
-- `references/mcd-tools.md` — 麦当劳 MCP 全部 33 个工具速查表 + 实测踩坑要点
+- `references/mcd-tools.md` — 麦当劳 MCP 35 个工具速查 + **16 条实测踩坑** + 真实返回字段速查
 - `references/finance-model.md` — 券收益率 / 积分 ROI / 消费分析的具体计算口径与公式
-- `scripts/mccfo_report.py` — 可运行的财报渲染引擎：输入订单/券/积分 JSON，输出 Markdown 或 HTML 财报
+- `scripts/mcd_mcp.py` — 零依赖 MCP Streamable HTTP 客户端（initialize / tools/list / tools/call，兼容 JSON 与 SSE，处理 401/429）
+- `scripts/mccfo_fetch.py` — 真实取数器：调 MCP → 归一化 → 产出 orders/coupons/points/meta JSON
+- `scripts/mccfo_report.py` — 财报渲染引擎：输入上述 JSON，输出 Markdown 或 HTML 财报
+- `examples/live-run-real.md` — **真实账户跑通的实测记录**（含每一步的原始返回与口径自检）
 - `examples/` — 典型对话与输出样例
 
 ## 边界

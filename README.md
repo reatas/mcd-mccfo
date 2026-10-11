@@ -74,7 +74,31 @@
 - **WorkBuddy**：`~/.workbuddy/skills/mccfo/`
 - **Claude Code / 其他 Agent**：放入对应的 skills 目录即可（`SKILL.md` 是通用格式，不绑定特定框架）
 
-### 第 4 步 · 开聊
+### 第 4 步 · 一键跑出你自己的真实财报
+
+配好 Token 后，一条命令就能把你账户里的真实数据变成财报：
+
+```bash
+export MCD_MCP_TOKEN='你的Token'      # Windows: $env:MCD_MCP_TOKEN='你的Token'
+python scripts/mccfo_fetch.py --out out --render
+```
+
+它会**真实调用麦当劳 MCP**（`now-time-info` → `order-list` → 逐单 `query-order` →
+`query-my-coupons` → `query-store-coupons` → `query-my-account` →
+`mall-points-products` → `mall-product-detail`），然后产出：
+
+```
+out/
+├── raw/*.json            每一次 MCP 调用的原始返回（便于自查口径）
+├── normalized/*.json     归一化后的 orders / coupons / points / meta
+├── mccfo-report.md       结构化财报
+└── mccfo-report.html     同内容的可视化报表（自包含单文件）
+```
+
+实测一次完整取数约调用 **23 次** MCP 工具，远低于 600 次/分钟的限流。
+一份真实账户跑出来的结果见 [`examples/live-run-real.md`](./examples/live-run-real.md)。
+
+### 第 5 步 · 开聊
 
 ```
 你：帮我看下我这个月在麦当劳花了多少钱
@@ -116,9 +140,23 @@ Score = 面额 D × 门槛效率 Yield × (1 + 紧迫度) × 需求匹配 × 门
 
 ---
 
-## 🖥️ 可运行的源码：财报渲染引擎
+## 🖥️ 可运行的源码：取数 + 渲染，两条真实链路
 
-`scripts/mccfo_report.py` 是 McCFO 的可运行部分——把 MCP 取到的订单/券/积分 JSON，渲染成 Markdown 或 HTML 财报。**仅依赖 Python 标准库，零第三方依赖。**
+McCFO 不只是提示词，它带三个**零第三方依赖**（仅 Python 标准库）的可运行脚本：
+
+| 脚本 | 职责 | 会不会调 MCP |
+|---|---|---|
+| `scripts/mcd_mcp.py` | MCP Streamable HTTP 客户端：initialize / tools/list / tools/call，兼容 JSON 与 SSE 响应，统一处理 401 / 429 / 会话保持 | ✅ |
+| `scripts/mccfo_fetch.py` | **真实取数器**：调 MCP → 归一化 → 产出 `orders/coupons/points/meta` JSON | ✅ |
+| `scripts/mccfo_report.py` | **财报渲染引擎**：吃上面的 JSON → 产出 Markdown / HTML 财报 | ❌ |
+
+### 链路 1 · 真实数据（推荐）
+
+```bash
+python scripts/mccfo_fetch.py --out out --render
+```
+
+### 链路 2 · 样例数据（离线复现 / 自检）
 
 ```bash
 python scripts/mccfo_report.py \
@@ -129,9 +167,17 @@ python scripts/mccfo_report.py \
 ```
 
 产物：`out/mccfo-report.md` + `out/mccfo-report.html`（自包含单文件，直接双击即可看）。
-仓库里已附上跑出来的样例：[`examples/report-sample.md`](./examples/report-sample.md) ｜ [`examples/report-sample.html`](./examples/report-sample.html)。
+样例输出：[`examples/report-sample.md`](./examples/report-sample.md) ｜ [`examples/report-sample.html`](./examples/report-sample.html)。
 
-> 设计取舍：脚本**不直接调用 MCP**——取数由 Agent 完成，脚本只负责渲染。这样渲染逻辑可离线复现、可自检、也不需要在代码里保管 Token。
+**为什么要分成两层**：渲染层不碰网络、不碰 Token，所以口径可以离线复现、可以手算自检；取数层只管忠实取数与归一化。同时 `--meta` 会把「数据来源、服务器时间、门店校验结论、本次降级项」写进报告，真实报告一眼可溯源。
+
+### 单独把客户端当工具用
+
+```bash
+python scripts/mcd_mcp.py list-tools          # 列出 35 个工具
+python scripts/mcd_mcp.py call now-time-info  # 调一个工具看原始返回
+python scripts/mcd_mcp.py call query-my-coupons --args '{"page":"1","pageSize":"200"}'
+```
 
 ---
 
@@ -139,7 +185,8 @@ python scripts/mccfo_report.py \
 
 ```
 mcd-mccfo/
-├── SKILL.md                      # 技能主体：四大模式 + 安全边界 + 输出规范
+├── .env.example                  # Token 配置模板（真实 .env 已被 gitignore）
+├── SKILL.md                      # 技能主体：四大模式 + 安全边界 + 真实取数通道
 ├── README.md                     # 本文件
 ├── MCP_INTEGRATION.md            # 使用的 MCP Server / Tool / 调用流程 / 业务价值
 ├── CONTEST_DECLARATION.md        # 参赛声明（官方文件，内容未改动）
@@ -149,6 +196,8 @@ mcd-mccfo/
 │   ├── mcd-tools.md              # 麦当劳 MCP 33 个工具速查 + 10 条实测踩坑
 │   └── finance-model.md          # 券收益 / 积分 ROI / 消费分析 的公式与口径
 ├── scripts/
+│   ├── mcd_mcp.py                # 零依赖 MCP 客户端（Streamable HTTP）
+│   ├── mccfo_fetch.py            # 真实取数器：调 MCP → 归一化 JSON
 │   ├── mccfo_report.py           # 财报渲染引擎（零依赖，可运行）
 │   └── sample_data/              # 脱敏样例数据
 │       ├── orders.sample.json
@@ -157,6 +206,7 @@ mcd-mccfo/
 └── examples/
     ├── demo.md                   # 三段典型对话
     ├── live-run.md               # 渲染链路实测记录（含口径自检）
+    ├── live-run-real.md          # ★ 真实账户跑通记录（MCP 实测 + 踩坑 + 口径自检）
     ├── report-sample.md          # 样例财报（Markdown）
     └── report-sample.html        # 样例财报（HTML）
 ```
@@ -180,8 +230,10 @@ mcd-mccfo/
 1. **它把权益金融化了**。券不是"优惠"，是**有行权价和到期日的期权**；积分不是"分"，是**会贬值的现金**。有了这个框架，"先用哪张券"从拍脑袋变成了一道可计算的题。
 2. **它输出的是财报，不是清单**。清单告诉你"有什么"，财报告诉你"意味着什么、接下来做什么"。每份报告都以「接下来做什么」收尾，最多三条，直接可执行。
 3. **它把"门店可用性"当成必检步骤**。券列表里躺着但这家店用不了的券，是最常见的翻车点——McCFO 强制用 `query-store-coupons` 做门店级校验。
-4. **它有真实可运行的代码**，不只是提示词。渲染引擎可离线复现、口径可手算自检。
-5. **它守住安全边界**。所有花钱、花积分、改变账户状态的操作，未经用户明确确认绝不执行。
+4. **它有真实可运行的代码，且真的连到了麦当劳 MCP**。不是"假设有这些数据"，而是 `mccfo_fetch.py` 一条命令把你账户的真实订单/券/积分拉下来算。零第三方依赖，clone 下来配个 Token 就能跑。
+5. **它把实测踩坑写进了代码和文档**。`discountValue` 不是优惠额、`order-list` 没有原价、商城 `price` 常年为 0、`query-store-coupons` 返回空 ≠ 不可用…… 这些坑不踩一遍是写不出来的，踩过之后每一条都在代码里有注释、在 `references/mcd-tools.md` 里有条目。
+6. **它敢说"我不知道"**。算不出的指标显示「—」而不是编一个 0.0%；积分不够换就直说还差多少分；没取到的模块写进报告第八节「降级与说明」。不编数据是底线。
+7. **它守住安全边界**。所有花钱、花积分、改变账户状态的操作，未经用户明确确认绝不执行；仓库零 Token（`.env` 已 gitignore，配置只有环境变量占位符）。
 
 ---
 

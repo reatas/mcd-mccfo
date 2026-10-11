@@ -37,7 +37,10 @@
 
 ## 二、使用的 Tool 清单
 
-麦当劳 MCP 共开放 33 个 Tool。McCFO 使用了其中 **19 个**，按"只读 / 写"分类如下。
+麦当劳 MCP 实际开放 **35** 个 Tool（2026-10 用 `tools/list` 实测；官方 README 表格列了 33 个，另有 `query-promotions`、`query-survey-coupon`）。
+McCFO 使用了其中 **19 个**，按"只读 / 写"分类如下。
+
+> 用 `python scripts/mcd_mcp.py list-tools` 可以自己复现这个清单。
 
 ### 2.1 核心只读 Tool（16 个）
 
@@ -71,6 +74,39 @@
 > 此外，`query-party-*` / `party-order-create`（主题活动）、`draw-lottery`（抽奖）、`cancel-order`（取消订单）、`delivery-*`（地址）等 Tool 未纳入核心链路——McCFO 的定位是"个人消费与权益分析"，主题活动与抽奖属于独立场景，避免功能发散。
 
 ---
+
+## 二·五、代码层的真实调用链路
+
+McCFO 不只靠 Agent 在对话里逐个调工具。`scripts/mccfo_fetch.py` 把上面 19 个 Tool 里的
+**只读全链路**固化成了可复现的代码（`scripts/mcd_mcp.py` 提供零依赖的 MCP 传输层）：
+
+```
+mccfo_fetch.py
+  ├── now-time-info              锁定"今天"，作为所有期间/剩余天数的基准
+  ├── order-list                 拿近期订单（只有实付额）
+  ├── query-order        × N     逐单补 原价 / 优惠 / 券 / 就餐方式
+  ├── query-my-coupons           账户全部券（静态卡包视图）
+  ├── query-store-coupons        门店级可用性校验（动态视图）
+  ├── query-my-account           积分余额 / 累计 / 将过期
+  ├── mall-points-products       商城可兑换商品
+  └── mall-product-detail × N    补每个候选的真实现金价（skuList[].extTradePrice）
+        │
+        ▼
+  out/normalized/{orders,coupons,points,meta}.json
+        │
+        ▼  mccfo_report.py
+  out/mccfo-report.md  +  out/mccfo-report.html
+```
+
+**实测一次完整取数 = 23 次 MCP 调用**（10 单 + 7 个在售兑换品），远低于 600 次/分钟的限流。
+
+代码层对 MCP 的忠实度做了三件关键处理，都是踩过坑才加的：
+
+| 真实情况 | 代码里的处理 |
+|---|---|
+| `order-list` 只有 `realTotalAmount`，没有原价/优惠 | 逐单调 `query-order` 补 `totalAmount` / `totalDiscountAmount`；都拿不到时才用「原价 − 实付」兜底 |
+| `query-my-coupons` 的 `discountValue` 是**券后价**不是优惠额 | 面额优先从券名解析「满X减Y」；解析不到才用 `discountValue` 并标 `discountEstimated=true`，报告显示 **（估）** |
+| `mall-points-products` 的 `price` 常年为 `"0"` | 现金价优先取 `mall-product-detail` 的 `skuList[].extTradePrice`，退回从 `spuName` 正则解析（`21.9元…`），并按 `downTime` 过滤掉已下架商品以免 610403 |
 
 ## 三、调用流程
 
@@ -207,7 +243,7 @@ McCFO 用 19 个 Tool 组合出的价值，不是"多调几个接口"，而是**
 
 ## 七、数据归一化
 
-`scripts/mccfo_report.py` 的输入结构与 MCP 返回字段的对应关系：
+`scripts/mccfo_report.py` 的输入结构与 MCP 返回字段的对应关系（由 `scripts/mccfo_fetch.py` 产出）：
 
 | 脚本字段 | 来源 | 说明 |
 |---|---|---|
@@ -220,7 +256,10 @@ McCFO 用 19 个 Tool 组合出的价值，不是"多调几个接口"，而是**
 | `coupons[].discount / threshold` | `query-my-coupons` | 面额 / 门槛 |
 | `coupons[].expireDate` | `query-my-coupons` | 到期日 |
 | `coupons[].storeAvailable` | **`query-store-coupons`** | 门店级可用性（关键校验位） |
-| `points.available / expiring` | `query-my-account` | 可用 / 即将过期积分 |
+| `points.available / expiring` | `query-my-account` | 可用 / 即将过期积分（字段是字符串，且可能是小数） |
+| `coupons[].discountEstimated` | 券名解析失败标记 | `true` 表示面额是估算值（券后价），报告标 **（估）** |
+| `coupons[].status` | `instructions.labels[].text` | 「未到使用时间」「到店」等券面状态 |
+| `meta.toolsCalled / degradations` | 取数过程 | 本次调用了哪些工具、哪些项被降级跳过（写进报告第八节） |
 | `points.products[].points / cashPrice` | `mall-points-products` + `mall-product-detail` | 消耗积分 / 现金参考价 |
 
 > 门店列表（`query-nearby-stores`）与活动日历（`campaign-calendar`）由 Agent 直接呈现给用户，不进入渲染引擎。

@@ -8,19 +8,32 @@ McCFO 财报渲染引擎  (麦麦财务官 · 渲染层)
 「订单 / 优惠券 / 积分」三类原始数据，按 references/finance-model.md
 定义的财务口径，渲染成一份结构化的个人消费财报（Markdown 或 HTML）。
 
+数据来源（两条路，同一套渲染逻辑）：
+  · 真实数据：先跑 scripts/mccfo_fetch.py（真实调用麦当劳 MCP），
+    它会产出 out/normalized/{orders,coupons,points,meta}.json，再喂给本脚本。
+  · 样例数据：直接用 scripts/sample_data/*.json，用于离线复现与自检。
+    --meta 传入 meta.json 时，报告头部会显示数据来源、门店校验结论与降级说明；
+    不带 --meta 时自动标注为「脱敏样例数据」。
+
 职责边界：
-  · 本脚本 **不** 直接调用麦当劳 MCP。取数由 Agent 通过 MCP 完成，
-    取到的 JSON 落到本地后再交给本脚本渲染。这样做的好处是：
-    渲染逻辑可离线复现、可单元测试、也不需要在代码里保管 Token。
-  · 本脚本不做网络请求、不读取任何凭据。
+  · 本脚本 **不** 直接调用麦当劳 MCP、不读取任何凭据，
+    渲染逻辑因此可离线复现、可单元测试。
 
 用法：
+  # 真实数据（配合 mccfo_fetch.py --render 自动调用）
+  python mccfo_report.py \
+      --orders  out/normalized/orders.json \
+      --coupons out/normalized/coupons.json \
+      --points  out/normalized/points.json \
+      --meta    out/normalized/meta.json \
+      --format  both --out ./out
+
+  # 样例数据
   python mccfo_report.py \
       --orders  sample_data/orders.sample.json \
       --coupons sample_data/coupons.sample.json \
       --points  sample_data/points.sample.json \
-      --format  both \
-      --out     ./out
+      --format  both --out ./out
 
 输出：
   out/mccfo-report.md    结构化财报（Markdown）
@@ -38,6 +51,7 @@ import os
 import sys
 from collections import defaultdict
 from datetime import date, datetime
+from typing import Optional
 
 # --------------------------------------------------------------------------
 # 常量与口径（与 references/finance-model.md 严格对应）
@@ -90,6 +104,22 @@ def pct(x: float) -> str:
     return f"{x * 100:.1f}%"
 
 
+def report_title(period: str) -> str:
+    """期间跨月时别硬叫"月度财报"——MCP 的 order-list 只返回近期订单，
+    用户可能两个月没消费，这时标题必须说实话。"""
+    try:
+        a, b = period.split("~")
+        ym_a, ym_b = a.strip()[:7], b.strip()[:7]
+    except Exception:
+        return "McCFO 消费财报"
+    return "McCFO 月度消费财报" if ym_a == ym_b else "McCFO 消费财报（跨月区间）"
+
+
+def pct_opt(x: Optional[float]) -> str:
+    """指标算不出来时显示「—」，而不是编一个 0.0% / 100.0% 出来。"""
+    return "—" if x is None else pct(x)
+
+
 def safe_div(a: float, b: float, default: float = 0.0) -> float:
     return a / b if b else default
 
@@ -126,13 +156,20 @@ def analyze_coupons(data: dict, today: date) -> dict:
         # 期望收益 = 面额 × 门槛效率 × 紧迫系数 × 需求匹配 × 门店可用
         score = d * yield_ * (1 + urgency) * fit * (1 if store_ok else 0)
 
+        # 券面状态：MCP 给的是「未到使用时间 / 到店 / 外送」这类标签；
+        # 一张券可以既是"有效"又"暂不可用"，两者必须分开表达。
+        status = " · ".join(c.get("labels") or []) or ("可用" if c.get("usableNow", True) else "暂不可用")
+
         rows.append({
             "name": c.get("name", "(未命名券)"),
+            "kind": c.get("kind", ""),
             "discount": d,
             "threshold": t,
+            "estimated": bool(c.get("discountEstimated", False)),
             "expire": exp.isoformat() if exp else "—",
             "days_left": days_left,
             "level": expiry_level(days_left),
+            "status": status,
             "yield": yield_,
             "urgency": urgency,
             "fit": fit,
@@ -145,7 +182,12 @@ def analyze_coupons(data: dict, today: date) -> dict:
     usable = [r for r in active if r["store_ok"]]
     total_d = sum(r["discount"] for r in active)
     usable_d = sum(r["discount"] for r in usable)
-    weighted_yield = safe_div(sum(r["discount"] * r["yield"] for r in active), total_d)
+    # 加权收益率只在「面额可信（非估算）」的券上算才有意义：
+    # 估算券的门槛未知，收益率恒为 100%，混进来会把这个指标拉成虚高的常数。
+    solid = [r for r in active if not r["estimated"] and r["threshold"] > 0]
+    weighted_yield = (safe_div(sum(r["discount"] * r["yield"] for r in solid),
+                               sum(r["discount"] for r in solid))
+                      if solid else None)
 
     ranked = sorted(usable, key=lambda r: (-r["score"], -r["discount"]))
     alert = sorted([r for r in active if 0 < r["days_left"] <= 3],
@@ -168,8 +210,8 @@ def analyze_coupons(data: dict, today: date) -> dict:
 # --------------------------------------------------------------------------
 
 def analyze_points(data: dict) -> dict:
-    p = int(data.get("available", 0) or 0)
-    p_exp = int(data.get("expiring", 0) or 0)
+    p = float(data.get("available", 0) or 0)
+    p_exp = float(data.get("expiring", 0) or 0)
 
     prods = []
     for item in data.get("products", []):
@@ -182,17 +224,23 @@ def analyze_points(data: dict) -> dict:
             "points": int(cost),
             "value": value,
             "value_estimated": bool(item.get("valueEstimated", False)),
+            "affordable": bool(item.get("affordable", cost <= p)),
             "need": need,
             "vpp": vpp,
             "priority": vpp * need,
         })
 
     prods.sort(key=lambda x: -x["priority"])
+    cheapest = min((x["points"] for x in prods), default=0)
     return {
         "available": p,
         "expiring": p_exp,
         "pressure": safe_div(p_exp, p, 0.0),
         "products": prods,
+        "cheapest": cheapest,
+        # 真实账户常见情况：积分太少，一个都换不起 —— 必须明说，不能假装能换
+        "shortfall": max(0.0, cheapest - p) if cheapest else 0.0,
+        "any_affordable": any(x["affordable"] for x in prods),
     }
 
 
@@ -255,7 +303,12 @@ def analyze_orders(data: dict) -> dict:
             price = float(it.get("price", 0) or 0) * qty
             cat_amount[cat] += price
             cat_count[cat] += qty
-            item_count[it.get("name", "?")] += qty
+            # 复购榜用「套餐内的真实单品」更准：随心配1+1 应该拆成 汉堡+可乐 计数，
+            # 而不是记成一个叫"随心配1+1"的东西。components 由取数器从
+            # comboItemList 提取；样例数据没有这个字段时退回商品名。
+            names = it.get("components") or [it.get("name", "?")]
+            for nm in names:
+                item_count[nm] += qty
             item_spend[it.get("name", "?")] += price
 
         rate = safe_div(dis, lst)
@@ -310,23 +363,37 @@ def build_actions(c: dict, p: dict):
 
     if ranked:
         top = ranked[0]
-        cond = ("无门槛，可直接省 " + money(top["discount"])) if top["threshold"] <= 0 \
-            else (f"凑到 {money(top['threshold'])} 可省 {money(top['discount'])}")
+        if top["estimated"]:
+            # 估算券：discountValue 是「用券价格」，不能说成"省 X 元"
+            cond = f"券后价 {money(top['discount'])}（面额为估算值，实际省多少以结账为准）"
+        elif top["threshold"] <= 0:
+            cond = "无门槛，可直接省 " + money(top["discount"])
+        else:
+            cond = f"凑到 {money(top['threshold'])} 可省 {money(top['discount'])}"
+        y = pct_opt(None if top["estimated"] else top["yield"])
+        ytxt = f"收益率 {y}，" if y != "—" else ""
         if 0 < top["days_left"] <= 3:
             out.append(("优先用掉临期高价值券",
-                        f"「{top['name']}」{top['days_left']} 天后到期，收益率 "
-                        f"{pct(top['yield'])}，{cond}。"))
+                        f"「{top['name']}」{top['days_left']} 天后到期，{ytxt}{cond}。"))
         else:
             out.append(("首选用这张券",
-                        f"「{top['name']}」，收益率 {pct(top['yield'])}，优先级最高，{cond}。"))
+                        f"「{top['name']}」，{ytxt}优先级最高，{cond}。"))
 
     rest = [r for r in alert if not ranked or r["name"] != ranked[0]["name"]]
     if rest:
         r = rest[0]
+        verb = f"券后价 {money(r['discount'])}" if r["estimated"] else f"可省 {money(r['discount'])}"
         out.append(("别漏掉这张临期券",
-                    f"「{r['name']}」{r['days_left']} 天后到期，可省 {money(r['discount'])}。"))
+                    f"「{r['name']}」{r['days_left']} 天后到期，{verb}。"))
 
-    if p["products"]:
+    if not p["products"]:
+        out.append(("积分暂无可兑商品",
+                    "当前积分商城没有取到带现金参考价的可兑换商品，本项跳过。"))
+    elif not p.get("any_affordable", True):
+        out.append(("积分还不够换",
+                    f"可用 {p['available']:g} 分，最便宜的「{p['products'][0]['name']}」要 "
+                    f"{p['products'][0]['points']:,} 分，还差 {p['shortfall']:g} 分 —— 先攒分，别硬换。"))
+    else:
         prod = p["products"][0]
         if p["pressure"] >= 0.3:
             out.append(("兑换积分",
@@ -346,14 +413,21 @@ def build_actions(c: dict, p: dict):
 # 渲染：Markdown
 # --------------------------------------------------------------------------
 
-def render_markdown(c: dict, p: dict, o: dict, today: date) -> str:
+def render_markdown(c: dict, p: dict, o: dict, today: date, meta: Optional[dict] = None) -> str:
     L = []
     A = L.append
+    meta = meta or {}
 
-    A("# 📊 McCFO 月度消费财报")
+    A(f"# 📊 {report_title(o['period'])}")
     A("")
     A(f"> 生成时间：{today.isoformat()} ｜ 统计期间：{o['period']}")
-    A("> 数据来源：麦当劳中国官方 MCP ｜ 渲染：McCFO 财报引擎")
+    if meta:
+        A(f"> 数据来源：**{meta.get('source', '麦当劳中国官方 MCP')}** ｜ "
+          f"服务器时间 {meta.get('serverDate', '—')} ｜ 共调用 MCP 工具 {len(meta.get('toolsCalled', []))} 次")
+        if meta.get("storeCode"):
+            A(f"> 门店级券校验：门店 `{meta.get('storeCode')}` ｜ {meta.get('storeCheckNote', '')}")
+    else:
+        A("> 数据来源：**脱敏样例数据**（scripts/sample_data，非真实账户） ｜ 渲染：McCFO 财报引擎")
     A("")
     A("---")
     A("")
@@ -441,23 +515,29 @@ def render_markdown(c: dict, p: dict, o: dict, today: date) -> str:
     A("## 五、券资产配置")
     A("")
     A(f"有效券 {c['count_active']} 张 ｜ 账面价值 {money(c['total_discount'])} ｜ "
-      f"本店可用 {money(c['usable_discount'])} ｜ 加权收益率 {pct(c['weighted_yield'])}")
+      f"本店可用 {money(c['usable_discount'])} ｜ 加权收益率 {pct_opt(c['weighted_yield'])}")
     A("")
     if c["alert"]:
         A("> 🔴 **临期预警**：" + "；".join(
             f"「{r['name']}」{r['days_left']} 天后到期（省 {money(r['discount'])}）"
             for r in c["alert"]))
         A("")
-    A("| 券名 | 面额 | 门槛 | 到期 | 剩余 | 收益率 | 优先级 | 状态 |")
-    A("|---|---:|---:|---|---:|---:|---:|---|")
+    A("| 券名 | 类型 | 面额 | 门槛 | 到期 | 剩余 | 收益率 | 优先级 | 状态 |")
+    A("|---|---|---:|---:|---|---:|---:|---:|---|")
     for r in c["ranked"][:10]:
-        A(f"| {r['name']} | {money(r['discount'])} | {money(r['threshold'])} | "
-          f"{r['expire']} | {r['days_left']}天 | {pct(r['yield'])} | "
-          f"{r['score']:.3f} | {r['level']} |")
+        est = "（估）" if r["estimated"] else ""
+        A(f"| {r['name']} | {r['kind'] or '—'} | {money(r['discount'])}{est} | "
+          f"{money(r['threshold'])} | {r['expire']} | {r['days_left']}天 | "
+          f"{pct_opt(None if r['estimated'] else r['yield'])} | "
+          f"{r['score']:.3f} | {r['level']} · {r['status']} |")
     unavailable = [r for r in c["rows"] if not r["expired"] and not r["store_ok"]]
     for r in unavailable:
-        A(f"| {r['name']} | {money(r['discount'])} | {money(r['threshold'])} | "
-          f"{r['expire']} | {r['days_left']}天 | {pct(r['yield'])} | — | ⚪ 本店不可用 |")
+        A(f"| {r['name']} | {r['kind'] or '—'} | {money(r['discount'])} | {money(r['threshold'])} | "
+          f"{r['expire']} | {r['days_left']}天 | "
+          f"{pct_opt(None if r['estimated'] else r['yield'])} | — | ⚪ 本店不可用 |")
+    A("")
+    A("> 面额标 **（估）** 的券：麦当劳 MCP 的 `discountInfo.discountValue` 语义是「用券价格」"
+      "（如 9.9 元早餐两件套），并非实际省下的钱，只能作为账面价值参考。")
     A("")
 
     # 积分资产
@@ -469,12 +549,18 @@ def render_markdown(c: dict, p: dict, o: dict, today: date) -> str:
     if p["pressure"] >= 0.3:
         A("> 🔴 **过期压力高**，建议优先兑换下列高 ROI 商品，避免积分作废。")
         A("")
-    A("| 商品 | 消耗积分 | 参考价值 | 每积分价值 | 优先级 |")
-    A("|---|---:|---:|---:|---:|")
+    if not p.get("any_affordable", True) and p["products"]:
+        A(f"> ⚠️ **当前积分不足以兑换**：可用 {p['available']:g} 分，"
+          f"最便宜的需 {p['cheapest']:,} 分，还差 {p['shortfall']:g} 分。"
+          f"下表是「攒够之后该怎么换」的排行榜。")
+        A("")
+    A("| 商品 | 消耗积分 | 参考价值 | 每积分价值 | 优先级 | 够不够 |")
+    A("|---|---:|---:|---:|---:|---|")
     for prod in p["products"][:8]:
         est = "（估）" if prod["value_estimated"] else ""
+        ok = "✅ 够" if prod["affordable"] else "❌ 差"
         A(f"| {prod['name']} | {prod['points']:,} | {money(prod['value'])}{est} | "
-          f"{prod['vpp']:.4f} 元/分 | {prod['priority']:.4f} |")
+          f"{prod['vpp']:.4f} 元/分 | {prod['priority']:.4f} | {ok} |")
     A("")
 
     # 结论
@@ -483,6 +569,13 @@ def render_markdown(c: dict, p: dict, o: dict, today: date) -> str:
     for i, (label, text) in enumerate(build_actions(c, p), 1):
         A(f"{i}. **{label}**：{text}")
     A("")
+
+    if meta and meta.get("degradations"):
+        A("## 八、本次取数的降级与说明")
+        A("")
+        for d in meta["degradations"]:
+            A(f"- {d}")
+        A("")
     A("---")
     A("")
     A("> ⚠️ 本报告由 McCFO 技能生成，为麦当劳程序员节创意开发大赛参赛作品，非麦当劳官方产品。")
@@ -499,7 +592,9 @@ def _esc(x) -> str:
     return html.escape(str(x))
 
 
-def render_html(c: dict, p: dict, o: dict, today: date) -> str:
+def render_html(c: dict, p: dict, o: dict, today: date, meta: Optional[dict] = None) -> str:
+    meta = meta or {}
+
     def bar(share: float) -> str:
         w = max(0.0, min(1.0, share)) * 100
         return f'<div class="bar"><span style="width:{w:.1f}%"></span></div>'
@@ -525,24 +620,53 @@ def render_html(c: dict, p: dict, o: dict, today: date) -> str:
 
     coupon_rows = "".join(
         f'<tr class="{ "alert" if 0 < r["days_left"] <= 3 else "" }">'
-        f'<td>{_esc(r["name"])}</td><td class="num">{money(r["discount"])}</td>'
+        f'<td>{_esc(r["name"])}</td><td>{_esc(r["kind"] or "—")}</td>'
+        f'<td class="num">{money(r["discount"])}{" (估)" if r["estimated"] else ""}</td>'
         f'<td class="num">{money(r["threshold"])}</td><td>{_esc(r["expire"])}</td>'
-        f'<td class="num">{r["days_left"]}天</td><td class="num">{pct(r["yield"])}</td>'
-        f'<td class="num">{r["score"]:.3f}</td><td>{_esc(r["level"])}</td></tr>'
+        f'<td class="num">{r["days_left"]}天</td>'
+        f'<td class="num">{pct_opt(None if r["estimated"] else r["yield"])}</td>'
+        f'<td class="num">{r["score"]:.3f}</td>'
+        f'<td>{_esc(r["level"])}<div class="sub">{_esc(r["status"])}</div></td></tr>'
         for r in c["ranked"][:10])
 
     for r in [r for r in c["rows"] if not r["expired"] and not r["store_ok"]]:
         coupon_rows += (
-            f'<tr class="muted"><td>{_esc(r["name"])}</td><td class="num">{money(r["discount"])}</td>'
+            f'<tr class="muted"><td>{_esc(r["name"])}</td><td>{_esc(r["kind"] or "—")}</td>'
+            f'<td class="num">{money(r["discount"])}</td>'
             f'<td class="num">{money(r["threshold"])}</td><td>{_esc(r["expire"])}</td>'
-            f'<td class="num">{r["days_left"]}天</td><td class="num">{pct(r["yield"])}</td>'
+            f'<td class="num">{r["days_left"]}天</td>'
+            f'<td class="num">{pct_opt(None if r["estimated"] else r["yield"])}</td>'
             f'<td class="num">—</td><td>⚪ 本店不可用</td></tr>')
 
     prod_rows = "".join(
-        f'<tr><td>{_esc(x["name"])}</td><td class="num">{x["points"]:,}</td>'
+        f'<tr class="{"muted" if not x["affordable"] else ""}">'
+        f'<td>{_esc(x["name"])}</td><td class="num">{x["points"]:,}</td>'
         f'<td class="num">{money(x["value"])}{"（估）" if x["value_estimated"] else ""}</td>'
-        f'<td class="num">{x["vpp"]:.4f} 元/分</td><td class="num">{x["priority"]:.4f}</td></tr>'
+        f'<td class="num">{x["vpp"]:.4f} 元/分</td><td class="num">{x["priority"]:.4f}</td>'
+        f'<td>{"✅ 够" if x["affordable"] else "❌ 差"}</td></tr>'
         for x in p["products"][:8])
+
+    est_note = ('<p class="note">面额标 <b>(估)</b> 的券：MCP 的 '
+                '<code>discountInfo.discountValue</code> 语义是「用券价格」，'
+                '并非实际省下的钱，仅作账面价值参考。</p>')
+
+    short_note = ""
+    if not p.get("any_affordable", True) and p["products"]:
+        short_note = (f'<div class="alertbox"><h4>⚠️ 当前积分不足以兑换</h4>'
+                      f'可用 <b>{p["available"]:g}</b> 分，最便宜的需 <b>{p["cheapest"]:,}</b> 分，'
+                      f'还差 <b>{p["shortfall"]:g}</b> 分。下表是攒够之后该怎么换的排行榜。</div>')
+
+    degrade_note = ""
+    if meta.get("degradations"):
+        lis = "".join(f"<li>{_esc(d)}</li>" for d in meta["degradations"])
+        degrade_note = f'<section><h2>六、本次取数的降级与说明</h2><ul class="note-list">{lis}</ul></section>'
+
+    source_line = (
+        f'数据来源：{_esc(meta.get("source", "麦当劳中国官方 MCP"))} ｜ '
+        f'服务器时间 {_esc(meta.get("serverDate", "—"))} ｜ '
+        f'MCP 工具调用 {len(meta.get("toolsCalled", []))} 次'
+        + (f' ｜ 门店校验 `{_esc(meta.get("storeCode", ""))}`' if meta.get("storeCode") else "")
+    ) if meta else "数据来源：脱敏样例数据（scripts/sample_data，非真实账户）"
 
     alert_box = ""
     if c["alert"]:
@@ -558,7 +682,7 @@ def render_html(c: dict, p: dict, o: dict, today: date) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>McCFO 月度消费财报 · {_esc(o['period'])}</title>
+<title>{report_title(o['period'])} · {_esc(o['period'])}</title>
 <style>
   :root {{
     --bg:#f5f6f8; --card:#ffffff; --ink:#1b1f24; --sub:#6b7280;
@@ -595,6 +719,10 @@ def render_html(c: dict, p: dict, o: dict, today: date) -> str:
   .alertbox {{ background:#fff6f6; border:1px solid #f5c2c2; border-radius:10px; padding:12px 16px; margin:12px 0; }}
   .alertbox ul {{ margin:0; padding-left:20px; }}
   ol.actions li {{ margin:6px 0; }}
+  td .sub {{ font-size:11px; color:var(--sub); }}
+  p.note {{ font-size:12px; color:var(--sub); margin:10px 0 0; }}
+  ul.note-list {{ font-size:13px; color:var(--sub); margin:0; padding-left:20px; }}
+  ul.note-list li {{ margin:4px 0; }}
   footer {{ text-align:center; color:var(--sub); font-size:12px; margin-top:24px; }}
 </style>
 </head>
@@ -602,8 +730,9 @@ def render_html(c: dict, p: dict, o: dict, today: date) -> str:
 <div class="wrap">
   <header>
     <div class="kicker">McCFO · 麦麦财务官</div>
-    <h1>📊 月度消费财报</h1>
-    <div class="meta">统计期间 {_esc(o['period'])} ｜ 生成于 {today.isoformat()} ｜ 数据来源：麦当劳中国官方 MCP</div>
+    <h1>📊 {report_title(o['period'])}</h1>
+    <div class="meta">统计期间 {_esc(o['period'])} ｜ 生成于 {today.isoformat()}</div>
+    <div class="meta" style="margin-top:6px">{source_line}</div>
   </header>
 
   <div class="cards">
@@ -632,23 +761,25 @@ def render_html(c: dict, p: dict, o: dict, today: date) -> str:
   <section>
     <h2>三、券资产配置</h2>
     <p class="k">有效券 {c['count_active']} 张 ｜ 账面价值 {money(c['total_discount'])} ｜
-       本店可用 {money(c['usable_discount'])} ｜ 加权收益率 {pct(c['weighted_yield'])}</p>
+       本店可用 {money(c['usable_discount'])} ｜ 加权收益率 {pct_opt(c['weighted_yield'])}</p>
     {alert_box}
     <table>
-      <tr><th>券名</th><th style="text-align:right">面额</th><th style="text-align:right">门槛</th>
+      <tr><th>券名</th><th>类型</th><th style="text-align:right">面额</th><th style="text-align:right">门槛</th>
           <th>到期</th><th style="text-align:right">剩余</th><th style="text-align:right">收益率</th>
           <th style="text-align:right">优先级</th><th>状态</th></tr>
       {coupon_rows}
     </table>
+    {est_note}
   </section>
 
   <section>
     <h2>四、积分资产 ROI</h2>
-    <p>可用 <b>{p['available']:,}</b> 分 ｜ 即将过期 <b>{p['expiring']:,}</b> 分
+    <p>可用 <b>{p['available']:g}</b> 分 ｜ 即将过期 <b>{p['expiring']:g}</b> 分
        （压力 {pct(p['pressure'])}）</p>
+    {short_note}
     <table>
       <tr><th>商品</th><th style="text-align:right">消耗积分</th><th style="text-align:right">参考价值</th>
-          <th style="text-align:right">每积分价值</th><th style="text-align:right">优先级</th></tr>
+          <th style="text-align:right">每积分价值</th><th style="text-align:right">优先级</th><th>够不够</th></tr>
       {prod_rows}
     </table>
   </section>
@@ -657,6 +788,8 @@ def render_html(c: dict, p: dict, o: dict, today: date) -> str:
     <h2>五、接下来做什么</h2>
     <ol class="actions">{action_items}</ol>
   </section>
+
+  {degrade_note}
 
   <footer>
     ⚠️ 本报告由 McCFO 技能生成，为麦当劳程序员节创意开发大赛参赛作品，非麦当劳官方产品。<br>
@@ -682,13 +815,24 @@ def main() -> int:
     ap.add_argument("--orders", required=True, help="订单 JSON")
     ap.add_argument("--coupons", required=True, help="优惠券 JSON")
     ap.add_argument("--points", required=True, help="积分 JSON")
+    ap.add_argument("--meta", default=None,
+                    help="取数元信息 JSON（由 mccfo_fetch.py 产出）；传入后报告显示数据来源与降级说明")
     ap.add_argument("--out", default="./out", help="输出目录")
     ap.add_argument("--format", default="both", choices=["md", "html", "both"])
     ap.add_argument("--as-of", default=None, help="以指定日期为准（YYYY-MM-DD），默认今天")
     args = ap.parse_args()
 
-    today = (datetime.strptime(args.as_of, "%Y-%m-%d").date()
-             if args.as_of else date.today())
+    meta = load_json(args.meta) if args.meta else None
+
+    # 有 meta 时以「取数当天的服务器日期」为基准，保证券的剩余天数与真实口径一致
+    if meta and meta.get("serverDate"):
+        try:
+            today = datetime.strptime(meta["serverDate"][:10], "%Y-%m-%d").date()
+        except Exception:
+            today = date.today()
+    else:
+        today = (datetime.strptime(args.as_of, "%Y-%m-%d").date()
+                 if args.as_of else date.today())
 
     orders = load_json(args.orders)
     coupons = load_json(args.coupons)
@@ -704,13 +848,13 @@ def main() -> int:
     if args.format in ("md", "both"):
         path = os.path.join(args.out, "mccfo-report.md")
         with open(path, "w", encoding="utf-8") as f:
-            f.write(render_markdown(c, p, o, today))
+            f.write(render_markdown(c, p, o, today, meta))
         written.append(path)
 
     if args.format in ("html", "both"):
         path = os.path.join(args.out, "mccfo-report.html")
         with open(path, "w", encoding="utf-8") as f:
-            f.write(render_html(c, p, o, today))
+            f.write(render_html(c, p, o, today, meta))
         written.append(path)
 
     print("McCFO 财报已生成：")

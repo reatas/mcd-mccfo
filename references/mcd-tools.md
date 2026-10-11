@@ -4,7 +4,10 @@
 > 接入地址：`https://mcp.mcd.cn` ｜ 协议：Streamable HTTP ｜ 鉴权：`Authorization: Bearer <MCP_TOKEN>`
 > 限流：**600 次/分钟**，超限返回 `429`；Token 无效返回 `401`。
 
-## 一、全部 33 个工具（按业务域分组）
+## 一、全部 35 个工具（按业务域分组）
+
+> 实测：`tools/list` 于 2026-10 返回 **35** 个工具（官方 README 表格列了 33 个，
+> 另有 `query-survey-coupon`、`query-promotions` 两个未列入表格但确实存在）。
 
 ### 🥗 营养
 | Tool | 说明 |
@@ -26,7 +29,9 @@
 | `query-store-coupons` | 查询**当前门店下可用**的优惠券列表（券可用性校验的关键） |
 | `available-coupons` | 查询当前可**领取**的麦麦省券列表 |
 | `auto-bind-coupons` | **一键领取**麦麦省所有当前可用的券（写操作，需用户同意） |
-| `query-my-coupons` | 查询用户账户下**已有**的全部优惠券 |
+| `query-my-coupons` | 查询用户账户下**已有**的全部优惠券（支持 `page` / `pageSize`，最大 200） |
+| `query-promotions` | 营销活动查询 |
+| `query-survey-coupon` | 问卷券查询 |
 
 ### 🍔 点餐（菜单 / 价格 / 订单）
 | Tool | 说明 |
@@ -79,7 +84,64 @@
 | `auto-bind-coupons` | 批量领取券（改变账户状态） |
 | `delivery-create-address` | 新增地址（改变账户数据） |
 
-## 三、实测踩坑要点（McCFO 开发中总结）
+## 三、真实返回字段速查（2026-10 实测抓包整理）
+
+> 这一节是 `scripts/mccfo_fetch.py` 归一化逻辑的依据，写归一化代码前先看这里。
+
+### `order-list` → `data.list[]`
+
+| 字段 | 说明 |
+|---|---|
+| `orderId` / `createTime` / `storeCode` / `storeName` / `orderStatus` | 订单号、下单时间、门店、状态 |
+| `orderType` | `1`=到店（含自取/得来速），`2`=外送 |
+| `beType` | `1`=到店自提，`5`=得来速，`2`=麦乐送到家，`6`=企业团餐 |
+| `orderProductList[]` | `productCode` / `productName` / `quantity` / `comboItemList[]` |
+| `realTotalAmount` | **实付** |
+
+⚠️ **列表里没有原价、没有优惠额**。要算折扣率必须逐单再调 `query-order`。
+
+### `query-order` → `data`
+
+`totalAmount`（原价）｜`realTotalAmount`（实付）｜`totalDiscountAmount`（优惠）｜
+`couponList[]`｜`deliveryPrice` / `realDeliveryPrice`｜`takeWay`（外带/堂食）｜`orderProductList[].price`
+
+### `query-my-coupons` → `data.coupons[]`
+
+| 字段 | 说明 |
+|---|---|
+| `title` | 券名 —— **面额只能从这里解析**（见踩坑 11） |
+| `discountInfo.discountValue` + `discountInfo.discountDesc` | 数值 + 语义（实测 `discountDesc` =「用券价格」） |
+| `tradeStartDate` / `tradeEndDate` / `tradeStartDateTime` / `tradeEndDateTime` | 有效期 |
+| `weekdays[]` / `tradeTimePeriods[]` | 可用星期、可用时段 |
+| `instructions.labels[].text` | 「未到使用时间」「到店」等状态标签 |
+| `enable` / `unavailableType` | 是否可核销 |
+| `orderTypes[]` / `beTypes[]` / `tags[].label` | 渠道限制 |
+
+### `query-my-account` → `data`
+
+`availablePoint`（可用）｜`accumulativePoint`（累计）｜`usedPoint`（已用）｜
+`expiredPoint`（已过期）｜`frozenPoint`（冻结）｜
+`currentMouthExpirePoint` / `nextMouthExpirePoint`（本月/下月将过期）
+
+⚠️ **全是字符串，且可能是小数**（实测 `"22.8"`），必须做容错转换。
+
+### `mall-points-products` → `data[]`
+
+`spuName` / `spuId` / `point`（所需积分）/ `price` / `catName` / `upTime` / `downTime` / `status`
+
+⚠️ `price` 常年为 `"0"`；真实现金价藏在 `spuName`（`"21.9元巨无霸可乐组合"`）
+或 `mall-product-detail` 的 `skuList[].extTradePrice` 里。
+
+### `campaign-calendar` → `data`
+
+`currentTime` ｜ `dailyList[{date, dateText, events[{activityCode, activityStage, price, priceSuffix, articleDto{title, content, highlights, buttonText}}]}]` ｜ `subscribedEvents`
+
+### `query-nearby-stores` → `data[]`
+
+`storeCode` / `storeName` / `address` / `reservation` / `reservationTimeOptions[]`
+入参：`beType`（必填，1=到店自提 5=得来速）+ `searchType`（必填，1=收藏 2=按位置）+ 可选 `city` / `keyword`
+
+## 四、实测踩坑要点（McCFO 开发中总结，16 条）
 
 1. **金额是「元」字符串，积分不是元。** `query-meals`、`calculate-price`、`query-order` 返回的金额已是「元」，直接展示，不要做分↔元换算。所有 `points` 类字段是积分，**不做任何汇率换算**。
 2. **券分两层，必须都查。** `query-my-coupons` 是账户卡包（静态），`query-store-coupons` 是"这张券在这家店现在能不能用"（动态）。只查前者会给出错误的可用性结论——这是最容易翻车的地方。
@@ -91,10 +153,21 @@
 8. **套餐可以换品，但不能换单品。** `query-meal-detail` 能看套餐可替换项；官方说明套餐内容暂不支持完全自定义（以最新版本为准）。
 9. **支付无法在 MCP 内完成。** `create-order` 只返回支付链接，最终支付需用户本人在麦当劳 App/小程序完成。
 10. **空结果 ≠ 出错。** 券列表为空、订单为空是正常状态，如实汇报即可，不要补编数据。
+11. **⚠️ `query-my-coupons` 的 `discountValue` 不是优惠金额。** 实测 `discountDesc` =「用券价格」：一张「火腿扒堡早餐两件套」的 `discountValue` 是 `9.9`，那是**券后价**，不是省下的钱。照搬成面额会让 12 张券的账面价值虚高到 ¥168。正确做法：券名形如「满X减Y」时取「减Y」为精确面额；「买一送一」「X元套餐」「X元两件套」只能把 `discountValue` 当**估算**账面价值并标（估）。
+12. **⚠️ `order-list` 没有原价和优惠。** 只有 `realTotalAmount`。折扣率必须靠逐单 `query-order` 的 `totalAmount` / `totalDiscountAmount` 兜底，否则算不出「省了多少」。
+13. **⚠️ `mall-points-products` 的 `price` 是 `"0"`。** 真实现金价在 `spuName`（正则 `(\d+(?:\.\d+)?)元`）或 `mall-product-detail` 的 `skuList[].extTradePrice`。两条路都取不到就别硬算 VPP。
+14. **⚠️ `query-store-coupons` 返回 `[]` 不等于"不可用"。** 券未进入可用时间窗时（`instructions.labels` = 「未到使用时间」）同样返回空。必须区分「校验通过 / 校验跳过 / 确认不可用」三种状态再说结论。
+15. **⚠️ `mall-product-detail` 对已下架商品返回 `success:false` + `code 610403`。** 先用 `downTime` 过滤掉过期商品，能省掉大量无效调用；失败要当"取不到"跳过，不要中断流程。
+16. **⚠️ 数字字段全是字符串，积分还可能是小数。** `availablePoint: "22.8"`、`realTotalAmount: "1"`。任何 `float(v)` 都要包一层容错，积分用 `:g` 格式化输出，别用 `:,`（会显示成 `22`）。
+17. **⚠️ 实付可能为 `0`（0 元兑的券）。** 真实数据里出现过「圆筒买一送一」原价 54.5、实付 0。做「原价 − 实付」兜底优惠额时，条件别写成 `pay > 0`，否则这一单会被算成 0 优惠，导致 实付 + 优惠 ≠ 原价、折扣率与实付率相加不到 100%。口径必须自洽，跑完用 `实付 + 优惠 == 原价` 自检一遍。
 
-## 四、错误码
+## 五、错误码
 
 | code | 原因 | 处理 |
 |---|---|---|
 | 401 | Token 无效、过期或未提供 | 检查 `Authorization` 头与 Token 配置 |
 | 429 | 触发限流（>600 次/分钟） | 降低频率，拉长调用间隔后重试 |
+| 610403 | 麦麦商城商品已下架 | 跳过该商品（常见于 `mall-product-detail`） |
+
+> 业务错误不走 HTTP 状态码，而是 **HTTP 200 + 响应体 `success:false` + `code`**。
+> 客户端必须同时检查两者，只看 HTTP 状态会漏掉所有业务失败。
